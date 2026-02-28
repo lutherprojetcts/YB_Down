@@ -1,119 +1,189 @@
 import streamlit as st
+import yt_dlp
 import subprocess
 import os
 import shutil
+import json
 from pathlib import Path
 
 st.set_page_config(
-    page_title="Video Merger Pro",
-    layout="centered",
-    page_icon="🎬"
+    page_title="MediaFusion Pro",
+    layout="wide",
+    page_icon="🚀"
 )
 
-# ====== CSS MODERNO MOBILE FRIENDLY ======
+# =======================
+# 🎨 UI SaaS Premium
+# =======================
 st.markdown("""
 <style>
 .stApp {
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
     color: white;
 }
-
-h1, h2, h3 {
-    text-align: center;
+section[data-testid="stSidebar"] {
+    background: #111827;
 }
-
-.block-container {
-    padding-top: 2rem;
-}
-
-.stButton>button {
+.stButton>button, .stDownloadButton>button {
     width: 100%;
     border-radius: 12px;
     height: 50px;
-    font-size: 18px;
-    font-weight: bold;
-    background: linear-gradient(90deg, #00c6ff, #0072ff);
-    color: white;
-    border: none;
-}
-
-.stDownloadButton>button {
-    width: 100%;
-    border-radius: 12px;
-    height: 50px;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
 }
+h1, h2, h3 { text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🎬 Video Merger Pro")
-st.caption("Upload do vídeo + áudio separados e gere o MP4 final em alta qualidade.")
-
-# ====== UPLOAD ======
-video_file = st.file_uploader(
-    "📹 Upload do vídeo (sem áudio)",
-    type=["mp4", "webm", "mkv"]
+# =======================
+# 🔥 MENU
+# =======================
+menu = st.sidebar.radio(
+    "📂 Menu",
+    ["🔗 Gerar Links", "🎬 Unir / Otimizar Vídeo"]
 )
 
-audio_file = st.file_uploader(
-    "🎵 Upload do áudio",
-    type=["m4a", "mp3", "webm"]
-)
+# =======================
+# 🔗 GERADOR DE LINKS
+# =======================
+if menu == "🔗 Gerar Links":
 
-output_path = Path("final_output.mp4")
+    st.title("🔗 Gerador de Links Diretos")
 
-def limpar_arquivos():
-    for file in ["video_input", "audio_input", "final_output.mp4"]:
-        if os.path.exists(file):
-            os.remove(file)
+    url = st.text_input("Cole a URL do vídeo:")
 
-if video_file and audio_file:
+    if st.button("🚀 Gerar Links"):
+        if url:
+            with st.spinner("Extraindo streams..."):
+                try:
+                    ydl_opts = {
+                        'quiet': True,
+                        'format': 'bestvideo+bestaudio/best',
+                    }
 
-    st.success("Arquivos carregados com sucesso!")
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
 
-    if st.button("🚀 Gerar Vídeo Final"):
+                        video_url = info['url']
 
-        with st.spinner("Processando... Isso pode levar alguns minutos para vídeos grandes."):
+                        ydl_opts['format'] = 'bestaudio'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_audio:
+                            info_audio = ydl_audio.extract_info(url, download=False)
+                            audio_url = info_audio['url']
 
-            limpar_arquivos()
+                    st.success("Links gerados!")
 
-            # ====== SALVANDO EM STREAM (BAIXO USO RAM) ======
-            with open("video_input", "wb") as f:
-                shutil.copyfileobj(video_file, f)
+                    st.subheader("🎥 Vídeo")
+                    st.code(video_url)
 
-            with open("audio_input", "wb") as f:
-                shutil.copyfileobj(audio_file, f)
+                    st.subheader("🎵 Áudio")
+                    st.code(audio_url)
 
-            # ====== MERGE OTIMIZADO (SEM REENCODE) ======
-            comando = [
-                "ffmpeg",
-                "-i", "video_input",
-                "-i", "audio_input",
-                "-c", "copy",
-                "-map", "0:v:0",
-                "-map", "1:a:0",
-                "-movflags", "+faststart",
-                "final_output.mp4"
-            ]
+                except Exception as e:
+                    st.error(str(e))
 
-            subprocess.run(
+# =======================
+# 🎬 MERGE PROFISSIONAL
+# =======================
+if menu == "🎬 Unir / Otimizar Vídeo":
+
+    st.title("🎬 MediaFusion Engine")
+
+    video_file = st.file_uploader("📹 Upload do vídeo", type=["mp4","webm","mkv"])
+    audio_file = st.file_uploader("🎵 Upload do áudio", type=["m4a","mp3","webm"])
+
+    def get_media_info(file):
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", file],
+            capture_output=True,
+            text=True
+        )
+        return json.loads(result.stdout)
+
+    if video_file and audio_file:
+
+        with open("video_input", "wb") as f:
+            shutil.copyfileobj(video_file, f)
+
+        with open("audio_input", "wb") as f:
+            shutil.copyfileobj(audio_file, f)
+
+        video_info = get_media_info("video_input")
+        duration = float(video_info["format"]["duration"])
+        size_mb = int(video_info["format"]["size"]) / (1024*1024)
+
+        st.info(f"⏱ Duração: {round(duration,2)}s | 📦 Tamanho: {round(size_mb,2)} MB")
+
+        compress = False
+        if size_mb > 800:
+            st.warning("Arquivo grande detectado. Compressão inteligente ativada.")
+            compress = True
+
+        if st.button("🚀 Processar Vídeo"):
+
+            progress = st.progress(0)
+            status = st.empty()
+
+            output_file = "final_output.mp4"
+
+            if compress:
+                comando = [
+                    "ffmpeg",
+                    "-i","video_input",
+                    "-i","audio_input",
+                    "-map","0:v:0",
+                    "-map","1:a:0",
+                    "-c:v","libx264",
+                    "-preset","fast",
+                    "-crf","23",
+                    "-c:a","aac",
+                    "-movflags","+faststart",
+                    output_file
+                ]
+            else:
+                comando = [
+                    "ffmpeg",
+                    "-i","video_input",
+                    "-i","audio_input",
+                    "-map","0:v:0",
+                    "-map","1:a:0",
+                    "-c","copy",
+                    "-movflags","+faststart",
+                    output_file
+                ]
+
+            process = subprocess.Popen(
                 comando,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.PIPE,
+                universal_newlines=True
             )
 
-        if output_path.exists():
+            for line in process.stderr:
+                if "time=" in line:
+                    try:
+                        time_str = line.split("time=")[1].split(" ")[0]
+                        h, m, s = time_str.split(":")
+                        current = float(h)*3600 + float(m)*60 + float(s)
+                        percent = min(current/duration,1.0)
+                        progress.progress(percent)
+                        status.text(f"Processando... {int(percent*100)}%")
+                    except:
+                        pass
 
-            st.success("✅ Vídeo gerado com sucesso!")
+            process.wait()
+            progress.progress(1.0)
+            status.text("Finalizado!")
 
-            with open(output_path, "rb") as f:
-                st.download_button(
-                    "📥 Baixar Vídeo Final",
-                    f,
-                    file_name="video_final.mp4",
-                    mime="video/mp4"
-                )
+            if Path(output_file).exists():
+                with open(output_file,"rb") as f:
+                    st.download_button(
+                        "📥 Baixar Vídeo Final",
+                        f,
+                        file_name="video_final.mp4",
+                        mime="video/mp4"
+                    )
 
-            # limpeza automática após renderizar botão
-            limpar_arquivos()
+            # limpeza
+            for file in ["video_input","audio_input","final_output.mp4"]:
+                if os.path.exists(file):
+                    os.remove(file)
